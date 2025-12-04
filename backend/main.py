@@ -39,7 +39,7 @@ class HandTrackingSystem:
         # Draw overlays
         frame = self.overlay.draw_virtual_object(frame)
         frame = self.overlay.draw_boundary_point(frame, boundary_point, contour=largest_contour, hull=hull, debug=True)
-        frame = self.overlay.draw_state(frame, state)
+        # frame = self.overlay.draw_state(frame, state) # Disabled for web UI
 
         return frame, state
 

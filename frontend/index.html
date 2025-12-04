@@ -7,9 +7,32 @@
     <link rel="stylesheet" href="static/styles.css">
 </head>
 <body>
-    <div class="container">
-        <header>
+    <!-- Landing Section -->
+    <div id="landing-section" class="container landing-container">
+        <div class="landing-content">
+            <div class="logo">🖐️</div>
             <h1>Hand Tracking POC</h1>
+            <p class="subtitle">Real-time safety boundary detection system</p>
+            
+            <div class="instructions-card">
+                <h3>Instructions</h3>
+                <ul>
+                    <li>Allow camera access when prompted</li>
+                    <li>Keep your hand visible in the frame</li>
+                    <li>Avoid the blue safety boundary</li>
+                </ul>
+            </div>
+
+            <div id="error-message" class="error-message hidden"></div>
+            <button id="enterBtn" class="btn primary large-btn">Start Hand Tracking</button>
+        </div>
+    </div>
+
+    <!-- Tracking Section -->
+    <div id="tracking-section" class="container hidden">
+        <header>
+            <button id="backBtn" class="btn secondary small-btn">← Back</button>
+            <h1>Live Tracking</h1>
             <div class="status-badge" id="statusBadge">SAFE</div>
         </header>
         
@@ -22,14 +45,10 @@
                 <canvas id="videoOutput"></canvas>
                 
                 <!-- Danger Overlay -->
-                <div id="dangerOverlay" class="danger-overlay hidden">
-                    <div class="danger-text">DANGER DANGER</div>
-                </div>
+                <div id="dangerOverlay" class="danger-overlay hidden"></div>
             </div>
             
             <div class="controls">
-                <button id="startBtn" class="btn primary">Start Camera</button>
-                <button id="stopBtn" class="btn secondary" disabled>Stop Camera</button>
                 <div class="fps-counter">FPS: <span id="fpsValue">0</span></div>
             </div>
         </div>

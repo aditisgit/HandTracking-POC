@@ -1,11 +1,16 @@
 const videoInput = document.getElementById('videoInput');
 const videoOutput = document.getElementById('videoOutput');
 const ctx = videoOutput.getContext('2d');
-const startBtn = document.getElementById('startBtn');
-const stopBtn = document.getElementById('stopBtn');
 const statusBadge = document.getElementById('statusBadge');
 const dangerOverlay = document.getElementById('dangerOverlay');
 const fpsValue = document.getElementById('fpsValue');
+
+// Navigation elements
+const landingSection = document.getElementById('landing-section');
+const trackingSection = document.getElementById('tracking-section');
+const enterBtn = document.getElementById('enterBtn');
+const backBtn = document.getElementById('backBtn');
+const errorMessage = document.getElementById('error-message');
 
 let stream = null;
 let ws = null;
@@ -23,8 +28,30 @@ const FRAME_HEIGHT = 480;
 videoOutput.width = FRAME_WIDTH;
 videoOutput.height = FRAME_HEIGHT;
 
-startBtn.addEventListener('click', startCamera);
-stopBtn.addEventListener('click', stopCamera);
+// Event Listeners
+enterBtn.addEventListener('click', async () => {
+    errorMessage.classList.add('hidden');
+    enterBtn.disabled = true;
+    enterBtn.textContent = 'Starting...';
+    
+    const success = await startCamera();
+    
+    if (success) {
+        landingSection.classList.add('hidden');
+        trackingSection.classList.remove('hidden');
+    } else {
+        enterBtn.disabled = false;
+        enterBtn.textContent = 'Start Hand Tracking';
+    }
+});
+
+backBtn.addEventListener('click', () => {
+    stopCamera();
+    trackingSection.classList.add('hidden');
+    landingSection.classList.remove('hidden');
+    enterBtn.disabled = false;
+    enterBtn.textContent = 'Start Hand Tracking';
+});
 
 async function startCamera() {
     try {
@@ -39,14 +66,14 @@ async function startCamera() {
 
         connectWebSocket();
         
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
         isRunning = true;
-        
         processFrame();
+        return true;
     } catch (err) {
-        console.error("Error accessing camera:", err);
-        alert("Could not access camera. Please ensure you have granted permission.");
+        console.error('Error accessing camera:', err);
+        errorMessage.textContent = 'Could not access camera. Please ensure you have granted permission.';
+        errorMessage.classList.remove('hidden');
+        return false;
     }
 }
 
@@ -61,11 +88,9 @@ function stopCamera() {
         ws = null;
     }
     
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
     ctx.clearRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
-    statusBadge.textContent = "SAFE";
-    statusBadge.style.backgroundColor = "var(--safe-color)";
+    statusBadge.textContent = 'SAFE';
+    statusBadge.style.backgroundColor = 'var(--safe-color)';
     dangerOverlay.classList.add('hidden');
 }
 
@@ -77,7 +102,7 @@ function connectWebSocket() {
     ws = new WebSocket(WS_URL);
     
     ws.onopen = () => {
-        console.log("Connected to WebSocket");
+        console.log('Connected to WebSocket');
         resetWatchdog();
     };
     
@@ -89,8 +114,11 @@ function connectWebSocket() {
         const img = new Image();
         img.onload = () => {
             ctx.drawImage(img, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+            
+            // Draw state overlay on top of the image
+            drawStateOverlay(data.state);
         };
-        img.src = "data:image/jpeg;base64," + data.image;
+        img.src = 'data:image/jpeg;base64,' + data.image;
         
         // Update state
         updateState(data.state);
@@ -105,7 +133,7 @@ function connectWebSocket() {
     };
     
     ws.onclose = () => {
-        console.log("WebSocket disconnected");
+        console.log('WebSocket disconnected');
         if (isRunning) {
             // Auto-reconnect after 1 second
             setTimeout(connectWebSocket, 1000);
@@ -113,15 +141,42 @@ function connectWebSocket() {
     };
     
     ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        console.error('WebSocket error:', error);
     };
+}
+
+function drawStateOverlay(state) {
+    ctx.save();
+    ctx.font = 'bold 24px Arial';
+    
+    let color = '#00FF00'; // SAFE
+    let text = state;
+
+    if (state === 'WARNING') color = '#FFFF00';
+    if (state === 'DANGER') {
+        color = '#FF0000';
+        text = 'DANGER DANGER'; // Update text for DANGER state
+    }
+    
+    ctx.fillStyle = color;
+    ctx.fillText(text, 20, 40);
+    
+    // Flash effect for DANGER
+    if (state === 'DANGER') {
+        const now = Date.now();
+        if (Math.floor(now / 200) % 2 === 0) { // Flash every 200ms
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+            ctx.fillRect(0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        }
+    }
+    ctx.restore();
 }
 
 function resetWatchdog() {
     if (watchdogTimer) clearTimeout(watchdogTimer);
     if (isRunning) {
         watchdogTimer = setTimeout(() => {
-            console.warn("Watchdog triggered - restarting frame loop");
+            console.warn('Watchdog triggered - restarting frame loop');
             if (ws && ws.readyState === WebSocket.OPEN) {
                 processFrame();
             }
@@ -148,8 +203,8 @@ function processFrame() {
 
     // Draw current video frame to a temporary canvas to get bytes
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = FRAME_WIDTH / 2; // Downscale for performance
-    tempCanvas.height = FRAME_HEIGHT / 2;
+    tempCanvas.width = FRAME_WIDTH; // Full resolution
+    tempCanvas.height = FRAME_HEIGHT;
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.drawImage(videoInput, 0, 0, tempCanvas.width, tempCanvas.height);
     
@@ -162,20 +217,20 @@ function processFrame() {
                 }
             });
         }
-    }, 'image/jpeg', 0.5); // Lower quality for speed
+    }, 'image/jpeg', 0.9); // High quality
 }
 
 function updateState(state) {
     statusBadge.textContent = state;
     
-    if (state === "SAFE") {
-        statusBadge.style.backgroundColor = "var(--safe-color)";
+    if (state === 'SAFE') {
+        statusBadge.style.backgroundColor = 'var(--safe-color)';
         dangerOverlay.classList.add('hidden');
-    } else if (state === "WARNING") {
-        statusBadge.style.backgroundColor = "var(--warning-color)";
+    } else if (state === 'WARNING') {
+        statusBadge.style.backgroundColor = 'var(--warning-color)';
         dangerOverlay.classList.add('hidden');
-    } else if (state === "DANGER") {
-        statusBadge.style.backgroundColor = "var(--danger-color)";
+    } else if (state === 'DANGER') {
+        statusBadge.style.backgroundColor = 'var(--danger-color)';
         dangerOverlay.classList.remove('hidden');
     }
 }

@@ -12,7 +12,7 @@ import os
 # Add current directory to sys.path to allow imports from main.py and its dependencies
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from main import HandTrackingSystem
+from backend.main import HandTrackingSystem
 
 app = FastAPI()
 
@@ -55,8 +55,8 @@ async def websocket_endpoint(websocket: WebSocket):
             # Process frame
             processed_frame, state = system.process_frame(frame)
             
-            # Encode processed frame to JPEG
-            _, buffer = cv2.imencode('.jpg', processed_frame)
+            # Encode processed frame to JPEG (High Quality)
+            _, buffer = cv2.imencode('.jpg', processed_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             jpg_as_text = base64.b64encode(buffer).decode('utf-8')
             
             # Send response
@@ -70,4 +70,7 @@ async def websocket_endpoint(websocket: WebSocket):
         print("Client disconnected")
     except Exception as e:
         print(f"Error: {e}")
-        await websocket.close()
+        try:
+            await websocket.close()
+        except:
+            pass

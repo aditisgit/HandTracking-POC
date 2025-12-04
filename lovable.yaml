@@ -1,0 +1,19 @@
+project_name: hand-tracking-poc
+description: Real-time hand tracking with danger zone detection.
+
+services:
+  - name: api-server
+    type: backend
+    language: python
+    root: .
+    build_command: pip install -r requirements.txt
+    start_command: uvicorn backend.app:app --host 0.0.0.0 --port 8000
+    env_vars:
+      PORT: 8000
+
+  - name: web-client
+    type: frontend
+    framework: html-js
+    root: frontend
+    build_command: null
+    output_directory: .

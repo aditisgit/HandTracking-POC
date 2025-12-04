@@ -51,7 +51,7 @@ class Overlay:
         Returns:
             numpy.ndarray: The frame with the virtual object drawn.
         """
-        cv2.circle(frame, center, radius, (255, 0, 0), 2)  # Draw the circle
+        cv2.circle(frame, center, radius, (255, 0, 0), -1)  # Draw the circle (filled/opaque)
         return frame
 
     def draw_boundary_point(self, frame, point, contour=None, hull=None, debug=False):
