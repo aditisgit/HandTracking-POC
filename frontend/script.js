@@ -24,10 +24,22 @@ const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 const WS_URL = `${protocol}//${window.location.host}/ws`;
 const FRAME_WIDTH = 640;
 const FRAME_HEIGHT = 480;
+const SEND_WIDTH = 320; // Downscale for network transmission
+const SEND_HEIGHT = 240;
+
+// Offscreen canvas for downscaling
+const offscreenCanvas = document.createElement('canvas');
+offscreenCanvas.width = SEND_WIDTH;
+offscreenCanvas.height = SEND_HEIGHT;
+const offscreenCtx = offscreenCanvas.getContext('2d');
 
 // Set canvas size
 videoOutput.width = FRAME_WIDTH;
 videoOutput.height = FRAME_HEIGHT;
+
+// Virtual Object Config (Must match backend)
+const CIRCLE_CENTER = { x: 320, y: 240 };
+const CIRCLE_RADIUS = 50;
 
 // Event Listeners
 enterBtn.addEventListener('click', async () => {
@@ -68,7 +80,8 @@ async function startCamera() {
         connectWebSocket();
         
         isRunning = true;
-        processFrame();
+        renderLoop(); // Start the local rendering loop
+        processFrame(); // Start the network loop
         return true;
     } catch (err) {
         console.error('Error accessing camera:', err);
@@ -95,41 +108,40 @@ function stopCamera() {
     dangerOverlay.classList.add('hidden');
 }
 
-let lastFrameSentTime = 0;
-const FRAME_INTERVAL = 1000 / 15; // Cap at 15 FPS to reduce load
-let watchdogTimer = null;
+let isProcessing = false; // Flow control flag
+let latestState = 'SAFE';
+let latestPoint = null;
 
 function connectWebSocket() {
     ws = new WebSocket(WS_URL);
     
     ws.onopen = () => {
         console.log('Connected to WebSocket');
+        isProcessing = false;
         resetWatchdog();
     };
     
     ws.onmessage = (event) => {
         resetWatchdog();
-        const data = JSON.parse(event.data);
+        isProcessing = false; // Server responded, ready for next frame
         
-        // Draw processed image
-        const img = new Image();
-        img.onload = () => {
-            ctx.drawImage(img, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+        try {
+            const data = JSON.parse(event.data);
+            latestState = data.state;
+            latestPoint = data.point;
             
-            // Draw state overlay on top of the image
-            drawStateOverlay(data.state);
-        };
-        img.src = 'data:image/jpeg;base64,' + data.image;
-        
-        // Update state
-        updateState(data.state);
-        
-        // Calculate FPS
-        updateFPS();
-        
-        // Request next frame processing
-        if (isRunning) {
-            requestAnimationFrame(processFrame);
+            // Update DOM state
+            updateState(latestState);
+            
+            // Calculate FPS (Network FPS)
+            updateFPS();
+            
+            // Trigger next network frame immediately
+            if (isRunning) {
+                processFrame();
+            }
+        } catch (e) {
+            console.error("Error parsing WS message", e);
         }
     };
     
@@ -143,7 +155,51 @@ function connectWebSocket() {
     
     ws.onerror = (error) => {
         console.error('WebSocket error:', error);
+        isProcessing = false;
     };
+}
+
+function renderLoop() {
+    if (!isRunning) return;
+
+    // 1. Draw the local video feed directly (Zero latency)
+    ctx.drawImage(videoInput, 0, 0, FRAME_WIDTH, FRAME_HEIGHT);
+    
+    // 2. Draw Virtual Object (Blue Circle)
+    ctx.beginPath();
+    ctx.arc(CIRCLE_CENTER.x, CIRCLE_CENTER.y, CIRCLE_RADIUS, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(0, 0, 255, 1)'; // Opaque blue
+    ctx.fill();
+    
+    // 3. Draw Boundary Point if detected
+    if (latestPoint) {
+        const [x, y] = latestPoint;
+        // Scale point if backend processed a different resolution
+        const scaleX = FRAME_WIDTH / SEND_WIDTH;
+        const scaleY = FRAME_HEIGHT / SEND_HEIGHT;
+        
+        const displayX = x * scaleX;
+        const displayY = y * scaleY;
+
+        ctx.beginPath();
+        ctx.arc(displayX, displayY, 5, 0, 2 * Math.PI);
+        ctx.fillStyle = 'red';
+        ctx.fill();
+        
+        // Draw line to center
+        ctx.beginPath();
+        ctx.moveTo(displayX, displayY);
+        ctx.lineTo(CIRCLE_CENTER.x, CIRCLE_CENTER.y);
+        ctx.strokeStyle = 'yellow';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+
+    // 4. Draw State Overlay
+    drawStateOverlay(latestState);
+    
+    // Loop
+    requestAnimationFrame(renderLoop);
 }
 
 function drawStateOverlay(state) {
@@ -186,39 +242,34 @@ function resetWatchdog() {
 }
 
 function processFrame() {
-    if (!isRunning || !ws || ws.readyState !== WebSocket.OPEN) {
-        if (isRunning && ws && ws.readyState === WebSocket.CONNECTING) {
-             // Wait for connection
-             return;
+    if (!isRunning) return;
+
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // If connecting, keep trying
+        if (ws && ws.readyState === WebSocket.CONNECTING) {
+            requestAnimationFrame(processFrame);
         }
         return;
     }
 
-    // Rate limiting
-    const now = performance.now();
-    if (now - lastFrameSentTime < FRAME_INTERVAL) {
-        requestAnimationFrame(processFrame);
+    // Flow control: Don't send if server is still processing
+    if (isProcessing) {
         return;
     }
-    lastFrameSentTime = now;
 
-    // Draw current video frame to a temporary canvas to get bytes
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = FRAME_WIDTH; // Full resolution
-    tempCanvas.height = FRAME_HEIGHT;
-    const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(videoInput, 0, 0, tempCanvas.width, tempCanvas.height);
+    isProcessing = true;
+
+    // 1. Draw video to offscreen canvas (Downscaled)
+    offscreenCtx.drawImage(videoInput, 0, 0, SEND_WIDTH, SEND_HEIGHT);
     
-    // Convert to blob/bytes
-    tempCanvas.toBlob((blob) => {
-        if (blob) {
-            blob.arrayBuffer().then(buffer => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(buffer);
-                }
-            });
+    // 2. Get blob data (Low quality is fine for tracking)
+    offscreenCanvas.toBlob((blob) => {
+        if (blob && ws.readyState === WebSocket.OPEN) {
+             ws.send(blob);
+        } else {
+             isProcessing = false; // Reset if failed
         }
-    }, 'image/jpeg', 0.9); // High quality
+    }, 'image/jpeg', 0.5);
 }
 
 function updateState(state) {

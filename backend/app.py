@@ -52,19 +52,11 @@ async def websocket_endpoint(websocket: WebSocket):
             if frame is None:
                 continue
 
-            # Process frame
-            processed_frame, state = system.process_frame(frame)
+            # Process frame to get data only
+            result = system.process_frame_data(frame)
             
-            # Encode processed frame to JPEG (High Quality)
-            _, buffer = cv2.imencode('.jpg', processed_frame, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
-            jpg_as_text = base64.b64encode(buffer).decode('utf-8')
-            
-            # Send response
-            response = {
-                "image": jpg_as_text,
-                "state": state
-            }
-            await websocket.send_json(response)
+            # Send JSON response
+            await websocket.send_json(result)
             
     except WebSocketDisconnect:
         print("Client disconnected")

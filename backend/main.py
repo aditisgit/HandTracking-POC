@@ -43,6 +43,35 @@ class HandTrackingSystem:
 
         return frame, state
 
+    def process_frame_data(self, frame):
+        """
+        Process a frame and return data only (no drawing).
+        Returns:
+            dict: {'state': str, 'point': tuple|None}
+        """
+        # Detect hand and boundary point
+        hand_data = self.hand_tracker.detect_hand(frame)
+        largest_contour, hull, boundary_point = hand_data
+
+        # Reset ROI if tracking is lost (boundary_point is None)
+        if boundary_point is None:
+            self.hand_tracker.roi = None
+
+        # Compute state
+        if boundary_point is not None:
+            distance = self.distance_logic.calculate_distance(boundary_point, CIRCLE_CENTER)
+            state = self.distance_logic.determine_state(distance)
+            # Ensure native Python types for JSON serialization
+            point = (int(boundary_point[0]), int(boundary_point[1]))
+        else:
+            state = "SAFE"
+            point = None
+
+        return {
+            "state": state,
+            "point": point
+        }
+
 def main():
     """
     Main function to run the real-time hand tracking pipeline locally.
