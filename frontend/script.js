@@ -20,7 +20,8 @@ let frameCount = 0;
 let lastFpsUpdate = 0;
 
 // Configuration
-const WS_URL = 'ws://localhost:8000/ws';
+const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+const WS_URL = `${protocol}//${window.location.host}/ws`;
 const FRAME_WIDTH = 640;
 const FRAME_HEIGHT = 480;
 
