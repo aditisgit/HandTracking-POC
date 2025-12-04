@@ -1,2 +1,6 @@
-opencv-python==4.5.5.64
-numpy==1.21.6
+fastapi
+uvicorn[standard]
+opencv-python-headless
+numpy<2.0.0
+websockets
+python-multipart

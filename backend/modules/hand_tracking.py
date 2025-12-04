@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from config.config import CIRCLE_CENTER, DOWNSAMPLE_RATIO, HSV_LOWER, HSV_UPPER, ROI_MARGIN, SMOOTHING_WINDOW_SIZE, SMOOTHING_ALPHA, MAX_DISPLACEMENT
+from config.config import CIRCLE_CENTER, DOWNSAMPLE_RATIO, HSV_LOWER, HSV_UPPER, YCRCB_LOWER, YCRCB_UPPER, ROI_MARGIN, SMOOTHING_WINDOW_SIZE, SMOOTHING_ALPHA, MAX_DISPLACEMENT, MIN_AREA, MORPH_KERNEL
 from modules.smoothing_utils import PointSmoother
 import threading
 
@@ -11,16 +11,21 @@ class HandTracker:
         """
         self.hsv_lower = np.array(HSV_LOWER, dtype=np.uint8)
         self.hsv_upper = np.array(HSV_UPPER, dtype=np.uint8)
+        self.ycrcb_lower = np.array(YCRCB_LOWER, dtype=np.uint8)
+        self.ycrcb_upper = np.array(YCRCB_UPPER, dtype=np.uint8)
         self.smoother = PointSmoother(window_size=SMOOTHING_WINDOW_SIZE, alpha=SMOOTHING_ALPHA, max_displacement=MAX_DISPLACEMENT)
         self.roi = None  # Region of interest for tracking
-        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))  # Cached kernel
+        self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, MORPH_KERNEL)  # Cached kernel
+        self.prev_gray = None # For motion fallback
 
     def preprocess_frame(self, frame):
         """
         Preprocess the frame with optional ROI and downsampling.
         Returns:
             hsv_frame: The processed HSV frame.
+            ycrcb_frame: The processed YCrCb frame.
             roi_offset: (x, y) offset of the ROI in global coordinates.
+            gray_frame: Grayscale frame for motion detection.
         """
         roi_offset = (0, 0)
         
@@ -41,9 +46,15 @@ class HandTracker:
 
         # Downsample for faster processing
         frame = cv2.resize(frame, None, fx=DOWNSAMPLE_RATIO, fy=DOWNSAMPLE_RATIO, interpolation=cv2.INTER_LINEAR)
-        blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+        
+        # Blur to reduce noise
+        blurred = cv2.GaussianBlur(frame, (7, 7), 0)
+        
         hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
-        return hsv, roi_offset
+        ycrcb = cv2.cvtColor(blurred, cv2.COLOR_BGR2YCrCb)
+        gray = cv2.cvtColor(blurred, cv2.COLOR_BGR2GRAY)
+        
+        return hsv, ycrcb, roi_offset, gray
 
     def transform_to_global(self, contour, roi_offset):
         """
@@ -66,12 +77,34 @@ class HandTracker:
         """
         Detect the hand and update the ROI for tracking.
         """
-        hsv_frame, roi_offset = self.preprocess_frame(frame)
-        mask = cv2.inRange(hsv_frame, self.hsv_lower, self.hsv_upper)
+        hsv_frame, ycrcb_frame, roi_offset, gray_frame = self.preprocess_frame(frame)
+        
+        # 1. HSV Mask
+        mask_hsv = cv2.inRange(hsv_frame, self.hsv_lower, self.hsv_upper)
 
-        # Morphological operations
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel)
+        # 2. YCrCb Mask
+        mask_ycrcb = cv2.inRange(ycrcb_frame, self.ycrcb_lower, self.ycrcb_upper)
+
+        # Combine masks
+        mask = cv2.bitwise_and(mask_hsv, mask_ycrcb)
+
+        # 3. Motion Mask Fallback (Simple Frame Differencing)
+        if self.prev_gray is not None and self.prev_gray.shape == gray_frame.shape:
+            diff = cv2.absdiff(self.prev_gray, gray_frame)
+            _, motion_mask = cv2.threshold(diff, 25, 255, cv2.THRESH_BINARY)
+            # Combine: Keep skin pixels OR moving pixels that are likely skin
+            # This helps when skin detection is weak but hand is moving
+            # But to avoid noise, we primarily trust HSV, using motion to fill gaps
+            # For now, let's stick to robust HSV + Morphology as requested to avoid over-engineering
+            pass 
+        
+        self.prev_gray = gray_frame
+
+        # 3. Morphological Cleanup (Stronger)
+        # Close gaps
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, self.kernel, iterations=2)
+        # Remove speckles
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, self.kernel, iterations=2)
 
         # Find contours
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -81,8 +114,8 @@ class HandTracker:
             self.smoother.smooth(None) # Reset smoother
             return None, None, None
 
-        # Filter contours by area to remove noise
-        valid_contours = [c for c in contours if cv2.contourArea(c) > 3000]
+        # 4. Filter contours by area to remove noise
+        valid_contours = [c for c in contours if cv2.contourArea(c) > MIN_AREA]
 
         if not valid_contours:
             self.roi = None

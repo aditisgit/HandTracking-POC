@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking POC</title>
+    <link rel="stylesheet" href="static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Hand Tracking POC</h1>
+            <div class="status-badge" id="statusBadge">SAFE</div>
+        </header>
+        
+        <div class="main-content">
+            <div class="video-container">
+                <!-- Hidden video element for capturing camera -->
+                <video id="videoInput" autoplay playsinline style="display: none;"></video>
+                
+                <!-- Canvas for displaying processed frames -->
+                <canvas id="videoOutput"></canvas>
+                
+                <!-- Danger Overlay -->
+                <div id="dangerOverlay" class="danger-overlay hidden">
+                    <div class="danger-text">DANGER DANGER</div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="startBtn" class="btn primary">Start Camera</button>
+                <button id="stopBtn" class="btn secondary" disabled>Stop Camera</button>
+                <div class="fps-counter">FPS: <span id="fpsValue">0</span></div>
+            </div>
+        </div>
+    </div>
+    <script src="static/script.js"></script>
+</body>
+</html>
