@@ -3,6 +3,7 @@ from modules.camera import Camera
 from modules.hand_tracking import HandTracker
 from modules.distance_logic import DistanceLogic
 from modules.overlay import Overlay
+from config.config import ROI_MARGIN, DOWNSAMPLE_RATIO, CIRCLE_CENTER
 
 def main():
     """
@@ -10,8 +11,8 @@ def main():
     """
     # Initialize modules
     camera = Camera()
-    tracker = HandTracker()
-    logic = DistanceLogic()
+    hand_tracker = HandTracker()
+    distance_logic = DistanceLogic()
     overlay = Overlay()
 
     try:
@@ -19,29 +20,24 @@ def main():
             # Capture frame from the camera
             frame = camera.get_frame()
 
-            # Detect hand and get contour and hull
-            contour, hull = tracker.detect_hand(frame)
+            # Detect hand and boundary point
+            hand_data = hand_tracker.detect_hand(frame)
+            largest_contour, hull, boundary_point = hand_data
 
-            # Calculate distance and determine state
-            if contour is not None and hull is not None:
-                # Use the centroid of the contour as the reference point
-                moments = cv2.moments(contour)
-                if moments['m00'] != 0:
-                    cx = int(moments['m10'] / moments['m00'])
-                    cy = int(moments['m01'] / moments['m00'])
-                    distance = logic.calculate_distance((cx, cy), (frame.shape[1] // 2, frame.shape[0] // 2))
-                    state = logic.determine_state(distance)
-                else:
-                    state = "SAFE"
+            # Compute state
+            if boundary_point is not None:
+                distance = distance_logic.calculate_distance(boundary_point, CIRCLE_CENTER)
+                state = distance_logic.determine_state(distance)
             else:
                 state = "SAFE"
 
             # Draw overlays
-            frame = tracker.draw_hand(frame, contour, hull)
+            frame = overlay.draw_virtual_object(frame)
+            frame = overlay.draw_boundary_point(frame, boundary_point, contour=largest_contour, hull=hull, debug=True)
             frame = overlay.draw_state(frame, state)
 
             # Display the frame
-            cv2.imshow("Hand Tracking - Real-Time", frame)
+            cv2.imshow("Hand Tracking", frame)
 
             # Exit on 'q' key press
             if cv2.waitKey(1) & 0xFF == ord('q'):

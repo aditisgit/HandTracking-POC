@@ -3,8 +3,8 @@ import cv2  # Import OpenCV for font constants
 # Configuration file for the HandTracking-POC project
 
 # HSV color range for skin detection
-HSV_LOWER = (0, 30, 60)  # Lower bound of HSV for skin color
-HSV_UPPER = (20, 150, 255)  # Upper bound of HSV for skin color
+HSV_LOWER = (0, 20, 40)  # Lower bound of HSV for skin color
+HSV_UPPER = (30, 255, 255)  # Upper bound of HSV for skin color
 
 # Distance thresholds for state logic
 THRESHOLD_SAFE = 100  # Distance above this is SAFE
@@ -19,3 +19,20 @@ FONT = cv2.FONT_HERSHEY_SIMPLEX  # Font for overlay text
 FONT_SCALE = 1
 FONT_COLOR = (255, 255, 255)  # White color
 LINE_THICKNESS = 2
+
+# Smoothing parameters
+SMOOTHING_WINDOW_SIZE = 3
+SMOOTHING_ALPHA = 0.6
+MAX_DISPLACEMENT = 100
+
+# Circle parameters
+CIRCLE_CENTER = (320, 240)  # Center of the virtual object
+CIRCLE_RADIUS = 50
+WARNING_BAND = 50
+
+# Debounce parameters
+DEBOUNCE_FRAMES = 3
+
+# ROI and performance parameters
+ROI_MARGIN = 100  # Margin around the detected hand for ROI tracking
+DOWNSAMPLE_RATIO = 1.0  # Downsample ratio for mask processing

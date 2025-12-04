@@ -1,5 +1,5 @@
 import numpy as np
-from config.config import THRESHOLD_SAFE, THRESHOLD_WARNING
+from config.config import THRESHOLD_SAFE, THRESHOLD_WARNING, CIRCLE_RADIUS, WARNING_BAND, DEBOUNCE_FRAMES
 
 class DistanceLogic:
     def __init__(self):
@@ -8,6 +8,8 @@ class DistanceLogic:
         """
         self.threshold_safe = THRESHOLD_SAFE
         self.threshold_warning = THRESHOLD_WARNING
+        self.debounce_frames = DEBOUNCE_FRAMES
+        self.state_history = []
 
     def calculate_distance(self, point1, point2):
         """
@@ -22,18 +24,48 @@ class DistanceLogic:
 
     def determine_state(self, distance):
         """
-        Determine the state (SAFE, WARNING, DANGER) based on the distance.
+        Determine the state (SAFE, WARNING, DANGER) based on the distance with hysteresis.
         Args:
             distance (float): The calculated distance.
         Returns:
             str: The state ('SAFE', 'WARNING', 'DANGER').
         """
-        if distance > self.threshold_safe:
+        if distance is None:
             return "SAFE"
-        elif self.threshold_warning < distance <= self.threshold_safe:
-            return "WARNING"
-        else:
-            return "DANGER"
+
+        # Hysteresis buffer to prevent flickering
+        hysteresis = 5
+
+        # Get the last state (or default to SAFE)
+        current_state = self.state_history[-1] if self.state_history else "SAFE"
+
+        new_state = current_state
+
+        if current_state == "SAFE":
+            if distance <= CIRCLE_RADIUS:
+                new_state = "DANGER"
+            elif distance <= CIRCLE_RADIUS + WARNING_BAND:
+                new_state = "WARNING"
+        
+        elif current_state == "WARNING":
+            if distance <= CIRCLE_RADIUS:
+                new_state = "DANGER"
+            elif distance > CIRCLE_RADIUS + WARNING_BAND + hysteresis:
+                new_state = "SAFE"
+        
+        elif current_state == "DANGER":
+            if distance > CIRCLE_RADIUS + hysteresis:
+                if distance <= CIRCLE_RADIUS + WARNING_BAND + hysteresis:
+                    new_state = "WARNING"
+                else:
+                    new_state = "SAFE"
+
+        self.state_history.append(new_state)
+        if len(self.state_history) > self.debounce_frames:
+            self.state_history.pop(0)
+
+        # Debounce logic: return the most frequent state in the last N frames
+        return max(set(self.state_history), key=self.state_history.count)
 
 if __name__ == "__main__":
     # Test the DistanceLogic module

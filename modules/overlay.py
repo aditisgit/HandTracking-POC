@@ -1,5 +1,5 @@
 import cv2
-from config.config import FONT, FONT_SCALE, FONT_COLOR, LINE_THICKNESS
+from config.config import FONT, FONT_SCALE, FONT_COLOR, LINE_THICKNESS, CIRCLE_CENTER, CIRCLE_RADIUS
 
 class Overlay:
     def __init__(self):
@@ -10,6 +10,8 @@ class Overlay:
         self.font_scale = FONT_SCALE
         self.font_color = FONT_COLOR
         self.line_thickness = LINE_THICKNESS
+        self.last_contour = None  # Store the last detected contour for debugging
+        self.last_hull = None  # Store the last detected hull for debugging
 
     def draw_state(self, frame, state):
         """
@@ -36,6 +38,37 @@ class Overlay:
             cv2.rectangle(overlay, (0, 0), (frame.shape[1], frame.shape[0]), (0, 0, 255), -1)
             alpha = 0.3  # Transparency factor
             cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0, frame)
+
+        return frame
+
+    def draw_virtual_object(self, frame, center=CIRCLE_CENTER, radius=CIRCLE_RADIUS):
+        """
+        Draw a virtual object (circle) on the frame.
+        Args:
+            frame (numpy.ndarray): The frame to draw on.
+            center (tuple): The center of the virtual object (x, y).
+            radius (int): The radius of the virtual object.
+        Returns:
+            numpy.ndarray: The frame with the virtual object drawn.
+        """
+        cv2.circle(frame, center, radius, (255, 0, 0), 2)  # Draw the circle
+        return frame
+
+    def draw_boundary_point(self, frame, point, contour=None, hull=None, debug=False):
+        """
+        Draw the closest boundary point as a white dot and optionally draw contours/hull for debugging.
+        """
+        if point is not None:
+            try:
+                point = (int(point[0]), int(point[1]))  # Ensure point is a tuple of integers
+                cv2.circle(frame, point, 5, (255, 255, 255), -1)  # White dot
+            except (TypeError, ValueError):
+                pass  # Skip drawing if point is invalid
+
+        if debug and contour is not None and hull is not None:
+            # Draw contours and hull for debugging
+            cv2.drawContours(frame, [contour], -1, (0, 255, 0), 2)  # Green contour
+            cv2.drawContours(frame, [hull], -1, (255, 0, 0), 2)  # Blue hull
 
         return frame
 
