@@ -37,10 +37,7 @@ This project is a real-time hand-boundary detection system using classical compu
    `ash
    .\start.bat
    ``r
-   *Alternatively, run manually:*
-   `ash
-   python -m uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
-   ``r
+   
 
 2. **Open the Application**:
    Open your browser and navigate to:
